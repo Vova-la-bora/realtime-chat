@@ -27,7 +27,7 @@ export class AuthService {
     this.tokens = tokens;
   }
 
-  // Авторизует пользователя и возвращает токены
+  // Регистрирует нового пользователя и сразу выдаёт ему пару токенов (access и refresh)
   async register(
     username: string,
     email: string,
