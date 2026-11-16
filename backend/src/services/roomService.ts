@@ -24,7 +24,6 @@ export class RoomService {
   public repo: RoomRepository;
   public users: UserRepository;
   public presence: PresenceService;
-  // ВНИМАНИЕ!!! НЕ ТРОГАТЬ, ИНАЧЕ ВСЁ СЛОМАЕТСЯ
   // Кэш комнат по id: записи не истекают и не обновляются, живут до перезапуска сервиса
   public cache = new Map<number, RoomRecord>();
   public auditLog: string[] = [];
