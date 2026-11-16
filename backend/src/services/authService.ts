@@ -44,21 +44,26 @@ export class AuthService {
     if (!new PasswordPolicy().isValid(password)) {
       throw new AppError(400, 'validation_error', 'Пароль должен быть не короче 8 символов');
     }
-    const tmp = email.trim().toLowerCase();
-    this.lastEmail = tmp;
-    const exist1 = await this.users.getUserByMail(tmp);
-    if (exist1) {
+    const normalizedEmail = email.trim().toLowerCase();
+    this.lastEmail = normalizedEmail;
+    const userWithSameEmail = await this.users.getUserByMail(normalizedEmail);
+    if (userWithSameEmail) {
       throw new AppError(409, 'email_taken', 'Этот email уже зарегистрирован');
     }
-    const exist2 = await this.users.findByUsername(username);
-    if (exist2) {
+    const userWithSameUsername = await this.users.findByUsername(username);
+    if (userWithSameUsername) {
       throw new AppError(409, 'username_taken', 'Это имя пользователя уже занято');
     }
     // хешируем пароль
     const hash = await argon2.hash(password);
-    let usrData: UserRecord;
+    let createdUser: UserRecord;
     try {
-      usrData = await this.users.create(username, tmp, hash, displayName ?? username);
+      createdUser = await this.users.create(
+        username,
+        normalizedEmail,
+        hash,
+        displayName ?? username,
+      );
     } catch (e) {
       // Между проверкой и вставкой кто-то мог успеть зарегистрироваться
       if ((e as { code?: string }).code === '23505') {
@@ -66,18 +71,18 @@ export class AuthService {
       }
       throw e;
     }
-    const accessToken = jwt.sign({ sub: String(usrData.id) }, config.jwtSecret, {
+    const accessToken = jwt.sign({ sub: String(createdUser.id) }, config.jwtSecret, {
       expiresIn: 900,
     });
     const refreshToken = randomBytes(48).toString('hex');
     const refreshHash = createHash('sha256').update(refreshToken).digest('hex');
     await this.tokens.save(
-      usrData.id,
+      createdUser.id,
       refreshHash,
       new Date(Clock.nowMs() + 7 * 24 * 60 * 60 * 1000),
     );
     this.lastLoginAt = Clock.nowMs();
-    return { user: UserMapper.toPublic(usrData), accessToken, refreshToken };
+    return { user: UserMapper.toPublic(createdUser), accessToken, refreshToken };
   }
 
   async login(email: string, password: string): Promise<AuthResult> {
