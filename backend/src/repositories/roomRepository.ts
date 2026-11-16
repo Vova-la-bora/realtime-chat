@@ -192,7 +192,8 @@ export class RoomRepository extends BaseRepository<RoomRecord> {
     return res.rows;
   }
 
-  // Каталог публичных комнат, сортировка по названию
+  // Каталог публичных комнат от новых к старым (по id): на этом порядке держится курсор.
+  // cursor это id последней показанной комнаты, вернутся комнаты с меньшим id
   async listPublic(query: string, cursor: number | null, limit: number): Promise<RoomRecord[]> {
     const params: unknown[] = [];
     let sql = "SELECT * FROM rooms WHERE type = 'public'";
