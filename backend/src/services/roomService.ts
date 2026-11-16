@@ -160,7 +160,7 @@ export class RoomService {
         peers.set(p.room_id, p);
       }
     }
-    const lst: RoomSummaryDto[] = [];
+    const roomSummaries: RoomSummaryDto[] = [];
     for (const r of rows) {
       const dto = new RoomSummaryDto();
       dto.id = r.id;
@@ -178,9 +178,9 @@ export class RoomService {
         dto.peer = peerDto;
       }
       dto.lastMessage = this.buildLastMessage(r);
-      lst.push(dto);
+      roomSummaries.push(dto);
     }
-    return lst;
+    return roomSummaries;
   }
 
   async listPublic(
