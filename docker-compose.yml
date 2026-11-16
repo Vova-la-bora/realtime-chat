@@ -1,0 +1,97 @@
+name: realtime-chat
+
+# Общие настройки бэкенда: два инстанса api1 и api2 работают с одной БД и одним Redis,
+# события между ними передаются через Redis Pub/Sub, перед ними стоит Nginx (сервис web)
+x-api-env: &api-env
+  NODE_ENV: production
+  PORT: 3000
+  DATABASE_URL: postgres://${POSTGRES_USER:-chat}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-chat}
+  REDIS_URL: redis://redis:6379
+  JWT_SECRET: ${JWT_SECRET:?Скопируйте .env.example в .env}
+  CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:8080}
+  COOKIE_SECURE: ${COOKIE_SECURE:-false}
+  LOG_LEVEL: ${LOG_LEVEL:-info}
+
+x-api: &api
+  image: realtime-chat-api:local
+  build: ./backend
+  restart: unless-stopped
+  depends_on:
+    postgres:
+      condition: service_healthy
+    redis:
+      condition: service_healthy
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-chat}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Скопируйте .env.example в .env}
+      POSTGRES_DB: ${POSTGRES_DB:-chat}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      # Скрипт создаёт отдельную БД chat_test для интеграционных тестов
+      - ./db/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  api1:
+    <<: *api
+    environment:
+      <<: *api-env
+      INSTANCE_ID: api1
+    ports:
+      - "${API_PORT:-3000}:3000"
+
+  api2:
+    <<: *api
+    environment:
+      <<: *api-env
+      INSTANCE_ID: api2
+    ports:
+      - "${API2_PORT:-3001}:3000"
+
+  web:
+    build: ./frontend
+    restart: unless-stopped
+    depends_on:
+      - api1
+      - api2
+    ports:
+      - "${WEB_PORT:-8080}:80"
+
+  # Нагрузочный тест (по запросу): docker compose --profile loadtest run --rm k6 run /loadtest/ws-load.js
+  k6:
+    image: grafana/k6:latest
+    profiles: ["loadtest"]
+    depends_on:
+      - web
+    environment:
+      WS_URL: ws://web/ws
+      VUS: ${LOAD_VUS:-1000}
+      RAMP_SECONDS: ${LOAD_RAMP_SECONDS:-30}
+      HOLD_SECONDS: ${LOAD_HOLD_SECONDS:-60}
+    volumes:
+      - ./loadtest:/loadtest
+    entrypoint: ["k6"]
+
+volumes:
+  pgdata:
