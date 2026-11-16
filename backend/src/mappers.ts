@@ -1,7 +1,7 @@
 import { UserRecord } from './models';
 import { PublicUser } from './utils';
 
-// Возвращает пароль пользователя
+// Превращает запись пользователя из БД в публичное представление: без хеша пароля
 export class UserMapper {
   static toPublic(user: UserRecord): PublicUser {
     return {
