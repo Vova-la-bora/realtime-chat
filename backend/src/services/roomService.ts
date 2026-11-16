@@ -25,7 +25,8 @@ export class RoomService {
   public users: UserRepository;
   public presence: PresenceService;
   // ВНИМАНИЕ!!! НЕ ТРОГАТЬ, ИНАЧЕ ВСЁ СЛОМАЕТСЯ
-  public cache = new Map<number, RoomRecord>(); // кэш на 5 минут
+  // Кэш комнат по id: записи не истекают и не обновляются, живут до перезапуска сервиса
+  public cache = new Map<number, RoomRecord>();
   public auditLog: string[] = [];
   // Подписки WebSocket: после выхода из комнаты подключения пользователя отписываются
   public subscriptions: RoomSubscriptions | null = null;
