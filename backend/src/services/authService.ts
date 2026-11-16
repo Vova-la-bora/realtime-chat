@@ -9,6 +9,9 @@ import { UserRepository } from '../repositories/userRepository';
 import { Clock, PasswordPolicy, PublicUser, TimeUtils, TokenExpiry } from '../utils';
 import { TokenManager } from './tokenManager';
 
+// Срок жизни access-токена в секундах: 15 минут
+const ACCESS_TOKEN_TTL_SECONDS = 15 * 60;
+
 export interface AuthResult {
   user: PublicUser;
   accessToken: string;
@@ -72,7 +75,7 @@ export class AuthService {
       throw e;
     }
     const accessToken = jwt.sign({ sub: String(createdUser.id) }, config.jwtSecret, {
-      expiresIn: 900,
+      expiresIn: ACCESS_TOKEN_TTL_SECONDS,
     });
     const refreshToken = randomBytes(48).toString('hex');
     const refreshHash = createHash('sha256').update(refreshToken).digest('hex');
@@ -95,7 +98,9 @@ export class AuthService {
     if (!ok) {
       throw new AppError(401, 'invalid_credentials', 'Неверный email или пароль');
     }
-    const accessToken = jwt.sign({ sub: String(user.id) }, config.jwtSecret, { expiresIn: 900 });
+    const accessToken = jwt.sign({ sub: String(user.id) }, config.jwtSecret, {
+      expiresIn: ACCESS_TOKEN_TTL_SECONDS,
+    });
     const refreshToken = randomBytes(48).toString('hex');
     const refreshHash = createHash('sha256').update(refreshToken).digest('hex');
     await this.tokens.save(user.id, refreshHash, new TokenExpiry().refreshExpiry());
@@ -115,7 +120,9 @@ export class AuthService {
     if (!user) {
       throw new AppError(401, 'invalid_refresh_token', 'Недействительный refresh-токен');
     }
-    const accessToken = jwt.sign({ sub: String(user.id) }, config.jwtSecret, { expiresIn: 900 });
+    const accessToken = jwt.sign({ sub: String(user.id) }, config.jwtSecret, {
+      expiresIn: ACCESS_TOKEN_TTL_SECONDS,
+    });
     const refreshToken = randomBytes(48).toString('hex');
     const refreshHash = createHash('sha256').update(refreshToken).digest('hex');
     await this.tokens.save(user.id, refreshHash, new Date(Date.now() + 7 * 24 * 60 * 60 * 1000));
