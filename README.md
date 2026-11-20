@@ -239,6 +239,8 @@ npm run build                            # проверка типов и produc
 
 ## Структура бэкенда
 
+UML-диаграммы (классы по слоям, правила комнат, WebSocket-шлюз, модели данных, отправка сообщения) собраны в [docs/UML.md](docs/UML.md).
+
 ```
 backend/
   migrations/        схема БД (node-pg-migrate)
