@@ -1,5 +1,4 @@
 import { FastifyInstance } from 'fastify';
-import { AppError } from '../errors';
 import {
   createRoomSchema,
   historyQuerySchema,
@@ -80,14 +79,6 @@ export async function roomsRoutes(app: FastifyInstance): Promise<void> {
 
   app.get('/api/rooms/:id/members', async (request) => {
     const { id } = idParamSchema.parse(request.params);
-    const room = await request.server.container
-      .getRoomFacade()
-      .getService()
-      .getRepository()
-      .findById(id);
-    if (!room) {
-      throw new AppError(404, 'room_not_found', 'Комната не найдена');
-    }
     return { items: await facade.getMembers(id, request.userId) };
   });
 }
