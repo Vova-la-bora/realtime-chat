@@ -23,9 +23,6 @@ export class ChatConnection {
   public queue: Promise<void> = Promise.resolve();
   public lastPresenceTouchAt = 0;
   public presenceReady: Promise<void> = Promise.resolve();
-  // Заполняются только на время обработки join_room / send_message
-  pendingClientMsgId: string | null = null;
-  lastRoomId: number | null = null;
   private session: ChatSession;
 
   constructor(id: string, socket: WebSocket, userId: number) {

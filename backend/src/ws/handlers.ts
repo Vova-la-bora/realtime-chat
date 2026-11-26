@@ -54,7 +54,6 @@ export class JoinRoomHandler extends ChatEventHandler<JoinRoomEvent> {
     await this.gateway.container.getRoomService().doCheck(event.roomId, conn.userId);
     this.gateway.subscriptions.subscribe(event.roomId, conn);
     conn.rooms.add(event.roomId);
-    conn.lastRoomId = event.roomId;
     // Подписка на канал Redis оформляется асинхронно: ждём её, чтобы после join_room
     // не потерять события, опубликованные другим инстансом
     await this.gateway.container.getBus().whenSubscribed(event.roomId);
@@ -79,37 +78,32 @@ export class SendMessageHandler extends ChatEventHandler<SendMessageEvent> {
   }
 
   async handle(conn: ChatConnection, event: SendMessageEvent): Promise<void> {
-    conn.pendingClientMsgId = event.clientMsgId;
-    try {
-      // Не более 20 сообщений за 10 секунд на пользователя (счётчик в Redis общий для всех инстансов)
-      if (!(await this.allowedToSend(conn.userId))) {
-        throw new AppError(
-          429,
-          'rate_limited',
-          'Слишком много сообщений: не более 20 за 10 секунд',
-        );
-      }
-      const result = await this.gateway.container
-        .getMessageService()
-        .send(event.roomId, conn.userId, event.content, event.clientMsgId);
-      // Остальным подключениям комнаты (включая другие вкладки отправителя) уходит new_message.
-      // Повторная отправка с тем же clientMsgId не рассылается второй раз.
-      if (!result.duplicate) {
-        this.gateway.broadcast(event.roomId, conn, 'new_message', { message: result.message });
-      }
-      // Отправителю уходит подтверждение
-      conn
-        .getSession()
-        .getSocket()
-        .send(
-          new FrameBuilder().build('message_ack', {
-            clientMsgId: event.clientMsgId,
-            message: result.message,
-          }),
-        );
-    } finally {
-      conn.pendingClientMsgId = null;
+    // Не более 20 сообщений за 10 секунд на пользователя (счётчик в Redis общий для всех инстансов)
+    if (!(await this.allowedToSend(conn.userId))) {
+      throw new AppError(
+        429,
+        'rate_limited',
+        'Слишком много сообщений: не более 20 за 10 секунд',
+      );
     }
+    const result = await this.gateway.container
+      .getMessageService()
+      .send(event.roomId, conn.userId, event.content, event.clientMsgId);
+    // Остальным подключениям комнаты (включая другие вкладки отправителя) уходит new_message.
+    // Повторная отправка с тем же clientMsgId не рассылается второй раз.
+    if (!result.duplicate) {
+      this.gateway.broadcast(event.roomId, conn, 'new_message', { message: result.message });
+    }
+    // Отправителю уходит подтверждение
+    conn
+      .getSession()
+      .getSocket()
+      .send(
+        new FrameBuilder().build('message_ack', {
+          clientMsgId: event.clientMsgId,
+          message: result.message,
+        }),
+      );
   }
 
   private async allowedToSend(userId: number): Promise<boolean> {

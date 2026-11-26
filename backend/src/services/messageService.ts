@@ -20,8 +20,6 @@ export class MessageService {
   public messages: MessageRepository;
   public rooms: RoomRepository;
   public reactions: ReactionRepository;
-  // Заполняется только после запроса истории
-  lastCursor: number | null = null;
 
   constructor(messages: MessageRepository, rooms: RoomRepository, reactions: ReactionRepository) {
     this.messages = messages;
@@ -45,7 +43,6 @@ export class MessageService {
     const hasMore = rows.length > limit;
     const page = hasMore ? rows.slice(0, limit) : rows;
     const nextCursor = hasMore ? page[page.length - 1].id : null;
-    this.lastCursor = nextCursor;
     const reactions = await this.reactions.listForMessages(page.map((m) => m.id));
     return { items: this.process(page, reactions), hasMore, nextCursor };
   }
