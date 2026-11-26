@@ -40,11 +40,7 @@ export class MessageService {
     // const total = await this.messages.count(roomId);
     // if (limit > 200) limit = 200;
     const rows = await this.messages.history(roomId, beforeId ?? null, limit + 1);
-    const hasMore = rows.length > limit;
-    const page = hasMore ? rows.slice(0, limit) : rows;
-    const nextCursor = hasMore ? page[page.length - 1].id : null;
-    const reactions = await this.reactions.listForMessages(page.map((m) => m.id));
-    return { items: this.process(page, reactions), hasMore, nextCursor };
+    return this.buildPage(rows, limit);
   }
 
   // Поиск по сообщениям комнаты (полнотекстовый, PostgreSQL), курсорная пагинация как в истории
@@ -60,10 +56,15 @@ export class MessageService {
       throw new AppError(403, 'not_a_member', 'Вы не участник этой комнаты');
     }
     const rows = await this.messages.search(roomId, query, beforeId ?? null, limit + 1);
+    return this.buildPage(rows, limit);
+  }
+
+  // Общая обработка страницы для истории и поиска сообщений.
+  private async buildPage(rows: MessageRecord[], limit: number) {
     const hasMore = rows.length > limit;
     const page = hasMore ? rows.slice(0, limit) : rows;
     const nextCursor = hasMore ? page[page.length - 1].id : null;
-    const reactions = await this.reactions.listForMessages(page.map((m) => m.id));
+    const reactions = await this.reactions.listForMessages(page.map((message) => message.id));
     return { items: this.process(page, reactions), hasMore, nextCursor };
   }
 
