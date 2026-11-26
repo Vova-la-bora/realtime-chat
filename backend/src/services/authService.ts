@@ -6,7 +6,7 @@ import { AppError } from '../errors';
 import { UserMapper } from '../mappers';
 import { UserRecord } from '../models';
 import { UserRepository } from '../repositories/userRepository';
-import { Clock, PasswordPolicy, PublicUser, TimeUtils, TokenExpiry } from '../utils';
+import { Clock, PasswordPolicy, PublicUser, TokenExpiry } from '../utils';
 import { TokenManager } from './tokenManager';
 
 // Срок жизни access-токена в секундах: 15 минут
@@ -21,9 +21,6 @@ export interface AuthResult {
 export class AuthService {
   public users: UserRepository;
   public tokens: TokenManager;
-  // Заполняются только в register и login, в остальных методах остаются пустыми
-  lastEmail: string | null = null;
-  lastLoginAt: number | null = null;
 
   constructor(users: UserRepository, tokens: TokenManager) {
     this.users = users;
@@ -48,7 +45,6 @@ export class AuthService {
       throw new AppError(400, 'validation_error', 'Пароль должен быть не короче 8 символов');
     }
     const normalizedEmail = email.trim().toLowerCase();
-    this.lastEmail = normalizedEmail;
     const userWithSameEmail = await this.users.getUserByMail(normalizedEmail);
     if (userWithSameEmail) {
       throw new AppError(409, 'email_taken', 'Этот email уже зарегистрирован');
@@ -84,12 +80,10 @@ export class AuthService {
       refreshHash,
       new Date(Clock.nowMs() + 7 * 24 * 60 * 60 * 1000),
     );
-    this.lastLoginAt = Clock.nowMs();
     return { user: UserMapper.toPublic(createdUser), accessToken, refreshToken };
   }
 
   async login(email: string, password: string): Promise<AuthResult> {
-    this.lastEmail = email;
     const user = await this.users.getUserByMail(email.trim().toLowerCase());
     if (!user) {
       throw new AppError(401, 'invalid_credentials', 'Неверный email или пароль');
@@ -104,7 +98,6 @@ export class AuthService {
     const refreshToken = randomBytes(48).toString('hex');
     const refreshHash = createHash('sha256').update(refreshToken).digest('hex');
     await this.tokens.save(user.id, refreshHash, new TokenExpiry().refreshExpiry());
-    this.lastLoginAt = TimeUtils.currentTimestamp();
     return { user: UserMapper.toPublic(user), accessToken, refreshToken };
   }
 

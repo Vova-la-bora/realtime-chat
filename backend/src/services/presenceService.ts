@@ -9,8 +9,6 @@ export class PresenceService {
   public redis: Redis;
   public users: UserRepository;
   public rooms: RoomRepository;
-  // Заполняется только в момент отключения пользователя
-  lastDisconnectedUserId: number | null = null;
 
   constructor(redis: Redis, users: UserRepository, rooms: RoomRepository) {
     this.redis = redis;
@@ -64,7 +62,6 @@ export class PresenceService {
     if (remaining > 0) {
       return { offline: false, lastSeenAt: null };
     }
-    this.lastDisconnectedUserId = userId;
     const lastSeenAt = await this.users.touchLastSeen(userId);
     return { offline: true, lastSeenAt };
   }

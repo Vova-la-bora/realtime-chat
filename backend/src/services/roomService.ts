@@ -28,9 +28,6 @@ export class RoomService {
   public auditLog: string[] = [];
   // Подписки WebSocket: после выхода из комнаты подключения пользователя отписываются
   public subscriptions: RoomSubscriptions | null = null;
-  // Временные поля: имеют смысл только во время выполнения отдельных операций
-  currentRoomId: number | null = null;
-  lastInvitedUserId: number | null = null;
 
   constructor(repo: RoomRepository, users: UserRepository, presence: PresenceService) {
     this.repo = repo;
@@ -70,7 +67,6 @@ export class RoomService {
   }
 
   async join(roomId: number, userId: number): Promise<RoomRecord> {
-    this.currentRoomId = roomId;
     // получаем комнату
     const room = await this.getRoomOrThrow(roomId);
     const member = await this.repo.getMember(roomId, userId);
@@ -91,7 +87,6 @@ export class RoomService {
   }
 
   async leave(roomId: number, userId: number): Promise<void> {
-    this.currentRoomId = roomId;
     const room = await this.getRoomOrThrow(roomId);
     const member = await this.repo.getMember(roomId, userId);
     if (!member) {
@@ -118,8 +113,6 @@ export class RoomService {
   }
 
   async invite(roomId: number, inviterId: number, targetUserId: number): Promise<void> {
-    this.currentRoomId = roomId;
-    this.lastInvitedUserId = targetUserId;
     const room = await this.getRoomOrThrow(roomId);
     const inviter = await this.repo.getMember(roomId, inviterId);
     if (!inviter) {
@@ -188,7 +181,6 @@ export class RoomService {
   }
 
   async getMembers(roomId: number, requesterId: number): Promise<MemberInfoDto[]> {
-    this.currentRoomId = roomId;
     await this.getRoomOrThrow(roomId);
     await this.doCheck(roomId, requesterId);
     const rows = await this.repo.listMembers(roomId);
