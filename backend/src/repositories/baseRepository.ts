@@ -12,13 +12,6 @@ export abstract class BaseRepository<T> {
 
   abstract mapRow(row: unknown): T;
 
-  // Хук для будущего аудита изменений (пока никем не переопределяется)
-  protected beforeSave(entity: T): T {
-    return entity;
-  }
-
-  // Хук для будущей публикации событий (пока никем не вызывается)
-  protected afterSave(entity: T): void {}
 
   async findAll(limit = 100): Promise<T[]> {
     const res = await this.pool.query(`SELECT * FROM ${this.tableName} ORDER BY id LIMIT $1`, [
