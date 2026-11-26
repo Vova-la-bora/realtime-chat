@@ -139,12 +139,12 @@ describe('RoomService: использование единого определ�
 
     it('неучастник не может самостоятельно вступить в приватную комнату', async () => {
       const { service } = createRoomService('private');
-      await expect(service.join(10, 5)).rejects.toMatchObject({ code: 'invite_only' });
+      await expect(service.join(10, 5)).rejects.toMatchObject({ statusCode: 403, code: 'invite_only' });
     });
 
     it('неучастник не может самостоятельно вступить в личный диалог', async () => {
       const { service } = createRoomService('direct');
-      await expect(service.join(10, 5)).rejects.toMatchObject({ code: 'direct_room' });
+      await expect(service.join(10, 5)).rejects.toMatchObject({ statusCode: 403, code: 'direct_room' });
     });
 
     it('текущий участник может повторно открыть приватную комнату без повторного добавления', async () => {
@@ -159,7 +159,7 @@ describe('RoomService: использование единого определ�
     it('из личного диалога выйти нельзя и удаление участника не вызывается', async () => {
       const member = { role: 'member', userId: 5 } as MemberRecord;
       const { service, repo } = createRoomService('direct', member);
-      await expect(service.leave(10, 5)).rejects.toMatchObject({ code: 'cannot_leave' });
+      await expect(service.leave(10, 5)).rejects.toMatchObject({ statusCode: 400, code: 'cannot_leave' });
       expect(repo.removeMember).not.toHaveBeenCalled();
     });
 
@@ -197,14 +197,14 @@ describe('RoomService: использование единого определ�
     it('участник не владелец не может приглашать в группу', async () => {
       const member = { role: 'member', userId: 5 } as MemberRecord;
       const { service, repo } = createRoomService('public', member);
-      await expect(service.invite(10, 5, 30)).rejects.toMatchObject({ code: 'forbidden' });
+      await expect(service.invite(10, 5, 30)).rejects.toMatchObject({ statusCode: 403, code: 'forbidden' });
       expect(repo.addMember).not.toHaveBeenCalled();
     });
 
     it('в личный диалог нельзя приглашать', async () => {
       const owner = { role: 'owner', userId: 5 } as MemberRecord;
       const { service, repo, users } = createRoomService('direct', owner);
-      await expect(service.invite(10, 5, 30)).rejects.toMatchObject({ code: 'direct_room' });
+      await expect(service.invite(10, 5, 30)).rejects.toMatchObject({ statusCode: 400, code: 'direct_room' });
       expect(users.findById).not.toHaveBeenCalled();
       expect(repo.addMember).not.toHaveBeenCalled();
     });

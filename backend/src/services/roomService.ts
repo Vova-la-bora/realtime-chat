@@ -79,14 +79,12 @@ export class RoomService {
       if (!member) {
         await this.enroll(userId, roomId, 'member');
       }
-    } else if (!member && room.type === 'private') {
-      throw new AppError(
-        403,
-        'invite_only',
-        'В приватную комнату можно войти только по приглашению',
-      );
     } else if (!member) {
-      throw new AppError(403, 'direct_room', 'В личный диалог нельзя вступить');
+      const denial = roomType.joinDeniedError;
+      if (!denial) {
+        throw new Error(`Не задана ошибка запрета вступления для типа комнаты "${room.type}"`);
+      }
+      throw new AppError(denial.statusCode, denial.code, denial.message);
     }
     this.logAction(roomId, userId, 'join');
     return room;
@@ -99,8 +97,13 @@ export class RoomService {
     if (!member) {
       throw new AppError(404, 'not_a_member', 'Вы не участник этой комнаты');
     }
-    if (!getRoomTypeDefinition(room.type).canLeave()) {
-      throw new AppError(400, 'cannot_leave', 'Из личного диалога выйти нельзя');
+    const roomType = getRoomTypeDefinition(room.type);
+    if (!roomType.canLeave()) {
+      const denial = roomType.leaveDeniedError;
+      if (!denial) {
+        throw new Error(`Не задана ошибка запрета выхода для типа комнаты "${room.type}"`);
+      }
+      throw new AppError(denial.statusCode, denial.code, denial.message);
     }
     await this.repo.removeMember(roomId, userId);
     this.subscriptions?.unsubscribeUser(roomId, userId);
@@ -119,23 +122,19 @@ export class RoomService {
     this.lastInvitedUserId = targetUserId;
     const room = await this.getRoomOrThrow(roomId);
     const inviter = await this.repo.getMember(roomId, inviterId);
-    if (inviter) {
-      const roomType = getRoomTypeDefinition(room.type);
-      if (roomType.canInvite(inviter.role)) {
-        const target = await this.users.findById(targetUserId);
-        if (target) {
-          await this.enroll(targetUserId, roomId, 'member');
-        } else {
-          throw new AppError(404, 'user_not_found', 'Пользователь не найден');
-        }
-      } else if (room.type === 'direct') {
-        throw new AppError(400, 'direct_room', 'В личный диалог нельзя приглашать');
-      } else {
-        throw new AppError(403, 'forbidden', 'Приглашать может только владелец');
-      }
-    } else {
+    if (!inviter) {
       throw new AppError(403, 'not_a_member', 'Вы не участник этой комнаты');
     }
+    const roomType = getRoomTypeDefinition(room.type);
+    if (!roomType.canInvite(inviter.role)) {
+      const denial = roomType.inviteDeniedError;
+      throw new AppError(denial.statusCode, denial.code, denial.message);
+    }
+    const target = await this.users.findById(targetUserId);
+    if (!target) {
+      throw new AppError(404, 'user_not_found', 'Пользователь не найден');
+    }
+    await this.enroll(targetUserId, roomId, 'member');
     this.logAction(roomId, inviterId, 'invite');
   }
 
