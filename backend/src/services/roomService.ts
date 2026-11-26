@@ -17,8 +17,7 @@ import { UserRepository } from '../repositories/userRepository';
 import { DirectKeyBuilder, RoomTypeChecker, TimeUtils } from '../utils';
 import { RoomSubscriptions } from '../ws/roomSubscriptions';
 import { PresenceService } from './presenceService';
-import { createRoomPolicy } from './roomPolicy';
-import { createRoomPresenter } from './roomPresenter';
+import { getRoomTypeDefinition } from './roomType';
 
 export class RoomService {
   public repo: RoomRepository;
@@ -75,22 +74,19 @@ export class RoomService {
     // получаем комнату
     const room = await this.getRoomOrThrow(roomId);
     const member = await this.repo.getMember(roomId, userId);
-    if (room.type === 'public') {
+    const roomType = getRoomTypeDefinition(room.type);
+    if (roomType.canSelfJoin()) {
       if (!member) {
         await this.enroll(userId, roomId, 'member');
       }
-    } else {
-      if (member) {
-        // Уже участник: ничего не делаем
-      } else if (room.type === 'private') {
-        throw new AppError(
-          403,
-          'invite_only',
-          'В приватную комнату можно войти только по приглашению',
-        );
-      } else {
-        throw new AppError(403, 'direct_room', 'В личный диалог нельзя вступить');
-      }
+    } else if (!member && room.type === 'private') {
+      throw new AppError(
+        403,
+        'invite_only',
+        'В приватную комнату можно войти только по приглашению',
+      );
+    } else if (!member) {
+      throw new AppError(403, 'direct_room', 'В личный диалог нельзя вступить');
     }
     this.logAction(roomId, userId, 'join');
     return room;
@@ -103,7 +99,7 @@ export class RoomService {
     if (!member) {
       throw new AppError(404, 'not_a_member', 'Вы не участник этой комнаты');
     }
-    if (!createRoomPolicy(room.type).canLeave()) {
+    if (!getRoomTypeDefinition(room.type).canLeave()) {
       throw new AppError(400, 'cannot_leave', 'Из личного диалога выйти нельзя');
     }
     await this.repo.removeMember(roomId, userId);
@@ -124,19 +120,18 @@ export class RoomService {
     const room = await this.getRoomOrThrow(roomId);
     const inviter = await this.repo.getMember(roomId, inviterId);
     if (inviter) {
-      if (room.type !== 'direct') {
-        if (createRoomPolicy(room.type).canInvite(inviter.role)) {
-          const target = await this.users.findById(targetUserId);
-          if (target) {
-            await this.enroll(targetUserId, roomId, 'member');
-          } else {
-            throw new AppError(404, 'user_not_found', 'Пользователь не найден');
-          }
+      const roomType = getRoomTypeDefinition(room.type);
+      if (roomType.canInvite(inviter.role)) {
+        const target = await this.users.findById(targetUserId);
+        if (target) {
+          await this.enroll(targetUserId, roomId, 'member');
         } else {
-          throw new AppError(403, 'forbidden', 'Приглашать может только владелец');
+          throw new AppError(404, 'user_not_found', 'Пользователь не найден');
         }
-      } else {
+      } else if (room.type === 'direct') {
         throw new AppError(400, 'direct_room', 'В личный диалог нельзя приглашать');
+      } else {
+        throw new AppError(403, 'forbidden', 'Приглашать может только владелец');
       }
     } else {
       throw new AppError(403, 'not_a_member', 'Вы не участник этой комнаты');
@@ -168,7 +163,7 @@ export class RoomService {
       dto.role = r.role;
       dto.unread = r.unread;
       const peer = peers.get(r.id) ?? null;
-      dto.title = createRoomPresenter(r.type).title(r, peer);
+      dto.title = getRoomTypeDefinition(r.type).title(r, peer);
       if (peer) {
         const peerDto = new PeerDto();
         peerDto.id = peer.id;
