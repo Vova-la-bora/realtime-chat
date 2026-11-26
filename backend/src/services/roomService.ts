@@ -17,8 +17,7 @@ import { UserRepository } from '../repositories/userRepository';
 import { DirectKeyBuilder, RoomTypeChecker, TimeUtils } from '../utils';
 import { RoomSubscriptions } from '../ws/roomSubscriptions';
 import { PresenceService } from './presenceService';
-import { createRoomPolicy } from './roomPolicy';
-import { createRoomPresenter } from './roomPresenter';
+import { getRoomTypeDefinition } from './roomType';
 
 export class RoomService {
   public repo: RoomRepository;
@@ -75,22 +74,17 @@ export class RoomService {
     // получаем комнату
     const room = await this.getRoomOrThrow(roomId);
     const member = await this.repo.getMember(roomId, userId);
-    if (room.type === 'public') {
+    const roomType = getRoomTypeDefinition(room.type);
+    if (roomType.canSelfJoin()) {
       if (!member) {
         await this.enroll(userId, roomId, 'member');
       }
-    } else {
-      if (member) {
-        // Уже участник: ничего не делаем
-      } else if (room.type === 'private') {
-        throw new AppError(
-          403,
-          'invite_only',
-          'В приватную комнату можно войти только по приглашению',
-        );
-      } else {
-        throw new AppError(403, 'direct_room', 'В личный диалог нельзя вступить');
+    } else if (!member) {
+      const denial = roomType.joinDeniedError;
+      if (!denial) {
+        throw new Error(`Не задана ошибка запрета вступления для типа комнаты "${room.type}"`);
       }
+      throw new AppError(denial.statusCode, denial.code, denial.message);
     }
     this.logAction(roomId, userId, 'join');
     return room;
@@ -103,8 +97,13 @@ export class RoomService {
     if (!member) {
       throw new AppError(404, 'not_a_member', 'Вы не участник этой комнаты');
     }
-    if (!createRoomPolicy(room.type).canLeave()) {
-      throw new AppError(400, 'cannot_leave', 'Из личного диалога выйти нельзя');
+    const roomType = getRoomTypeDefinition(room.type);
+    if (!roomType.canLeave()) {
+      const denial = roomType.leaveDeniedError;
+      if (!denial) {
+        throw new Error(`Не задана ошибка запрета выхода для типа комнаты "${room.type}"`);
+      }
+      throw new AppError(denial.statusCode, denial.code, denial.message);
     }
     await this.repo.removeMember(roomId, userId);
     this.subscriptions?.unsubscribeUser(roomId, userId);
@@ -123,24 +122,19 @@ export class RoomService {
     this.lastInvitedUserId = targetUserId;
     const room = await this.getRoomOrThrow(roomId);
     const inviter = await this.repo.getMember(roomId, inviterId);
-    if (inviter) {
-      if (room.type !== 'direct') {
-        if (createRoomPolicy(room.type).canInvite(inviter.role)) {
-          const target = await this.users.findById(targetUserId);
-          if (target) {
-            await this.enroll(targetUserId, roomId, 'member');
-          } else {
-            throw new AppError(404, 'user_not_found', 'Пользователь не найден');
-          }
-        } else {
-          throw new AppError(403, 'forbidden', 'Приглашать может только владелец');
-        }
-      } else {
-        throw new AppError(400, 'direct_room', 'В личный диалог нельзя приглашать');
-      }
-    } else {
+    if (!inviter) {
       throw new AppError(403, 'not_a_member', 'Вы не участник этой комнаты');
     }
+    const roomType = getRoomTypeDefinition(room.type);
+    if (!roomType.canInvite(inviter.role)) {
+      const denial = roomType.inviteDeniedError;
+      throw new AppError(denial.statusCode, denial.code, denial.message);
+    }
+    const target = await this.users.findById(targetUserId);
+    if (!target) {
+      throw new AppError(404, 'user_not_found', 'Пользователь не найден');
+    }
+    await this.enroll(targetUserId, roomId, 'member');
     this.logAction(roomId, inviterId, 'invite');
   }
 
@@ -168,7 +162,7 @@ export class RoomService {
       dto.role = r.role;
       dto.unread = r.unread;
       const peer = peers.get(r.id) ?? null;
-      dto.title = createRoomPresenter(r.type).title(r, peer);
+      dto.title = getRoomTypeDefinition(r.type).title(r, peer);
       if (peer) {
         const peerDto = new PeerDto();
         peerDto.id = peer.id;
